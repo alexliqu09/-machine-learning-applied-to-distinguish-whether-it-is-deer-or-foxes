@@ -1,1 +1,163 @@
-..
+## **USANDO ALGUNAS LIBRERIAS**
+'''Esta idea o metodo fue adaptado originalmente del curso de coursera  Convolutional Neural Networks in TensorFlow en el cual no enseña
+como seria diferenciar una imagenes es un perro y un gato.
+LO que yo trate de adaptar con la misma idea de zorros (distintas razas) y ciervos (igual).
+Lo que adapte en gran parte es enrutado aplicando las clases de introduccón de machine learning  en el curso de coursera se veia como 
+se utilizaba  librerias para poder desde nuestro OS abrir y descomprimir archivos tipo zip entonces yo lo que hice aplicando un poco de 
+lo aprendido en el modelo pix2pix utilizando el google drive importar las imagnes ,guardalas en una lista y dar un orden random,etc.
+el objetivo de esto era aplicar lo aprendido en el curso de Convolutional Neural Networks in TensorFlow de deeplearning.ai en coursera.'''
+############################################
+from google.colab import drive
+drive.mount('/content/drive')
+
+%tensorflow_version 2.x
+import numpy as np
+import scipy as sp
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from PIL import Image
+import os
+
+## ENRUTADO DE LOS ARCHIVOS
+
+PATH='/content/drive/My Drive/dataset/data_set_detc_img'
+
+PATH_TRAIN=PATH +'/train'
+PATH_VALIDATION=PATH +'/validacion'
+
+PATH_TRAIN_C=PATH_TRAIN + '/ciervo' 
+PATH_TRAIN_Z=PATH_TRAIN + '/zorros'
+
+PATH_VALIDATION_C=PATH_VALIDATION + '/ciervos'
+PATH_VALIDATION_Z=PATH_VALIDATION + '/zorros'
+
+
+imgurlsC=!ls -1 '{PATH_TRAIN_C}' #convertimos en lista las imagenes  de ciervos
+imgurlsZ=!ls -1 "{PATH_TRAIN_Z}" #convertimos en  lista las imagenes de zorros
+
+n=len(imgurlsC)#numero de imagenes de ciervos
+
+m=len(imgurlsZ)#numero de imagenes de zorros
+
+
+randurlsC=np.copy(imgurlsC)
+randurlsZ=np.copy(imgurlsZ)
+
+#desordenando las imagenes
+
+np.random.shuffle(randurlsC)
+np.random.shuffle(randurlsZ)
+
+#llenado con las imagenes de entrenamiento
+train_C=randurlsC[:n]
+train_Z=randurlsZ[:m]
+
+
+## **PLOTEAR  IMAGENES**
+
+%matplotlib inline
+
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+#graficaremos algunas imagenes en 4x4 
+nfilas=4
+ncolum=4
+index=0 #este es nueestro iterador para las imagenes
+
+#vamos a plotear algunas imagnes en 4x4
+fig = plt.gcf()
+fig.set_size_inches(ncolum*4, nfilas*4)
+
+index+=8
+
+next_C_pix = [os.path.join(PATH_TRAIN_C, fname) 
+                for fname in train_C[ index-8:index] 
+               ]
+
+next_Z_pix = [os.path.join(PATH_TRAIN_Z, fname) 
+                for fname in train_Z[ index-8:index]
+               ]
+
+for i, img_path in enumerate(next_C_pix+next_Z_pix):
+  
+  sp = plt.subplot(nfilas, ncolum, i + 1)
+  sp.axis('Off')
+
+  img = mpimg.imread(img_path)
+  plt.imshow(img)
+  
+  model = tf.keras.models.Sequential([
+    # aqui usamos un redes convolucionales con un alto y ancho de 150x150 y 3 que vendria hacer los 3 canales de color RGBA
+    tf.keras.layers.Conv2D(16, (3,3), activation='relu', input_shape=(150, 150, 3)),
+    tf.keras.layers.MaxPooling2D(2,2),
+    tf.keras.layers.Conv2D(32, (3,3), activation='relu'),
+    tf.keras.layers.MaxPooling2D(2,2), 
+    tf.keras.layers.Conv2D(64, (3,3), activation='relu'), 
+    tf.keras.layers.MaxPooling2D(2,2),
+    tf.keras.layers.Flatten(), 
+    # 512 capas ocultas
+    tf.keras.layers.Dense(512, activation='relu'), 
+    # solo 1 una ouput. podira ser 0 (ciervo ) o 1(zorro)
+    tf.keras.layers.Dense(1, activation='sigmoid')  
+])
+
+from tensorflow.keras.optimizers import RMSprop
+
+model.compile(optimizer=RMSprop(lr=0.001),
+              loss='binary_crossentropy',
+              metrics = ['acc'])
+              
+              
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+# rescalamos las imagenes a 1./255
+train_datagen = ImageDataGenerator( rescale = 1.0/255. )
+test_datagen  = ImageDataGenerator( rescale = 1.0/255. )
+
+
+# usamos las imagnes de entrenamiento en 20 lotes en la variable train_generator
+
+train_generator = train_datagen.flow_from_directory(PATH_TRAIN,
+                                                    batch_size=20,
+                                                    class_mode='binary',
+                                                    target_size=(150, 150))     
+
+# y para la validacion de imagnes en 20 lotes usamos validation_generator
+
+validation_generator =  test_datagen.flow_from_directory(PATH_VALIDATION,
+                                                         batch_size=20,
+                                                         class_mode  = 'binary',
+                                                         target_size = (150, 150))
+history = model.fit_generator(train_generator,
+                              validation_data=validation_generator,
+                              steps_per_epoch=50,
+                              epochs=20,
+                              validation_steps=15,
+                              verbose=2)
+
+#esto nos da una exactitud de aprox 75%
+
+from google.colab import files
+from keras.preprocessing import image
+
+uploaded=files.upload()
+
+for fn in uploaded.keys():
+ 
+  # predicting images
+  path='/content/' + fn
+  img=image.load_img(path, target_size=(150, 150))
+  
+  x=image.img_to_array(img)
+  x=np.expand_dims(x, axis=0)
+  images = np.vstack([x])
+  
+  classes = model.predict(images, batch_size=10)
+  
+  print(classes[0])
+  
+  if classes[0]>0:
+    print(fn + " is a  zorro")
+    
+  else:
+    print(fn + " is a ciervo")
